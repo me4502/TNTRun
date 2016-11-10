@@ -95,6 +95,8 @@ public class GameManager {
 
         player.setLocation(plugin.config.lobbySpawn);
         player.offer(Keys.GAME_MODE, GameModes.SURVIVAL);
+        player.offer(Keys.IS_FLYING, false);
+        player.offer(Keys.CAN_FLY, false);
 
         if (plugin.config.entryFee > 0 && Sponge.getServiceManager().isRegistered(EconomyService.class)) {
             EconomyService economyService = Sponge.getServiceManager().getRegistration(EconomyService.class).get().getProvider();
@@ -166,16 +168,13 @@ public class GameManager {
     public void onPlayerMove(MoveEntityEvent event, @Getter("getTargetEntity") Player player) {
         if (players.containsKey(player.getUniqueId())) {
             if (gameState == GameState.PLAYING) {
-                Location<World> location = event.getFromTransform().getLocation().getRelative(Direction.DOWN);
-                Location<World> below = location.getRelative(Direction.DOWN);
-                if (below.getBlockType() == BlockTypes.TNT) {
-                    Sponge.getScheduler().createTaskBuilder().delayTicks(5).execute(task -> {
-                        below.setBlockType(BlockTypes.AIR, Cause.source(plugin.container).build());
-                        location.setBlockType(BlockTypes.AIR, Cause.source(plugin.container).build());
-                    }).submit(plugin);
+                for (Location<World> block : getRemovableBlocks(player)) {
+                    if (block.getBlockType() == BlockTypes.TNT || block.getRelative(Direction.DOWN).getBlockType() == BlockTypes.TNT) {
+                        Sponge.getScheduler().createTaskBuilder().delayTicks(5).execute(task -> block.setBlockType(BlockTypes.AIR, Cause.source(plugin.container).build())).submit(plugin);
+                    }
                 }
 
-                if (location.getY() < plugin.config.minHeight) {
+                if (player.getLocation().getY() <= plugin.config.minHeight) {
                     killPlayer(player);
                 }
             } else if (gameState == GameState.STARTING) {
@@ -183,6 +182,22 @@ public class GameManager {
                     event.setToTransform(event.getToTransform().setPosition(event.getFromTransform().getPosition()));
             }
         }
+    }
+
+    private Set<Location<World>> getRemovableBlocks(Player player) {
+        Set<Location<World>> removableBlocks = new HashSet<>();
+
+        Location<World> playerLocation = player.getLocation();
+
+        for (double ox = -0.2; ox <= 0.2; ox += 0.2) {
+            for (double oz = -0.2; oz <= 0.2; oz += 0.2) {
+                Location<World> main = playerLocation.add(ox, 0, oz).getRelative(Direction.DOWN);
+                removableBlocks.add(main);
+                removableBlocks.add(main.getRelative(Direction.DOWN));
+            }
+        }
+
+        return removableBlocks;
     }
 
     private List<Player> getLivingPlayers() {
@@ -238,6 +253,8 @@ public class GameManager {
             } catch (DataException | MaxChangedBlocksException | IOException e) {
                 e.printStackTrace();
             }
+
+            gameState = GameState.WAITING;
         }).submit(plugin);
     }
 
