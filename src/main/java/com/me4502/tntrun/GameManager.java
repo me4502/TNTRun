@@ -40,6 +40,7 @@ public class GameManager {
     private AtomicInteger countingInterval = new AtomicInteger(0);
 
     private Map<UUID, Location<World>> players = new HashMap<>();
+    private Set<UUID> priorPlayers = new HashSet<>();
 
     GameManager(TNTRun plugin) {
         this.plugin = plugin;
@@ -49,6 +50,11 @@ public class GameManager {
 
     private void initialize() {
         gameState = GameState.WAITING;
+
+        players.clear();
+        priorPlayers.clear();
+
+        countingInterval.set(0);
     }
 
     private void startGame() {
@@ -92,11 +98,16 @@ public class GameManager {
 
     public void addPlayer(Player player) {
         players.put(player.getUniqueId(), player.getLocation().copy());
+        priorPlayers.add(player.getUniqueId());
 
         player.setLocation(plugin.config.lobbySpawn);
         player.offer(Keys.GAME_MODE, GameModes.SURVIVAL);
         player.offer(Keys.IS_FLYING, false);
         player.offer(Keys.CAN_FLY, false);
+
+        if (players.size() == 1) {
+            Sponge.getServer().getBroadcastChannel().send(plugin.getMessage("message.gamequeued"));
+        }
 
         if (plugin.config.entryFee > 0 && Sponge.getServiceManager().isRegistered(EconomyService.class)) {
             EconomyService economyService = Sponge.getServiceManager().getRegistration(EconomyService.class).get().getProvider();
@@ -143,6 +154,7 @@ public class GameManager {
 
     public void removePlayer(Player player) {
         players.remove(player.getUniqueId());
+        priorPlayers.remove(player.getUniqueId());
 
         if (gameState == GameState.WAITING) {
             if (players.size() < plugin.config.minPlayers) {
@@ -224,7 +236,7 @@ public class GameManager {
     }
 
     private void playerWins(Player player) {
-        sendToAll(plugin.getMessage("message.winner", s -> s.replace("%1", player.getName())));
+        priorPlayers.stream().map(uuid -> Sponge.getServer().getPlayer(uuid)).filter((Optional::isPresent)).map((Optional::get)).forEach(player1 -> player1.sendMessage(plugin.getMessage("message.winner", s -> s.replace("%1", player.getName()))));
 
         for (String command : plugin.config.rewardCommands) {
             Sponge.getCommandManager().process(Sponge.getServer().getConsole(), command.replace("@p", player.getName()));
@@ -254,7 +266,7 @@ public class GameManager {
                 e.printStackTrace();
             }
 
-            gameState = GameState.WAITING;
+            initialize();
         }).submit(plugin);
     }
 
