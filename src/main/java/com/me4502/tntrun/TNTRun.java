@@ -1,6 +1,7 @@
 package com.me4502.tntrun;
 
 import com.google.inject.Inject;
+import com.me4502.tntrun.command.EndCommand;
 import com.me4502.tntrun.command.JoinCommand;
 import com.me4502.tntrun.command.LeaveCommand;
 import ninja.leaping.configurate.ConfigurationNode;
@@ -20,8 +21,6 @@ import org.spongepowered.api.text.serializer.TextSerializers;
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
-import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.function.Function;
 
@@ -86,10 +85,17 @@ public class TNTRun {
                 .executor(new LeaveCommand(this))
                 .build();
 
+        CommandSpec endCommand = CommandSpec.builder()
+                .description(Text.of("End a game"))
+                .permission("tntrun.endgame")
+                .executor(new EndCommand(this))
+                .build();
+
         CommandSpec tntRunCommand = CommandSpec.builder()
                 .description(Text.of("TNT Run base command"))
                 .child(joinCommand, "join")
                 .child(leaveCommand, "leave", "quit")
+                .child(endCommand, "end")
                 .build();
 
         Sponge.getCommandManager().register(this, tntRunCommand, "tntrun", "tnt");
@@ -103,7 +109,7 @@ public class TNTRun {
     }
 
     public Text getMessage(String message, Function<String, String> replacer) {
-        String replaced = replacer.apply(messagesNode.getNode(message.replace(".", "_")).getString("Unknown message"));
+        String replaced = replacer.apply(messagesNode.getNode(message.replace(".", "_")).getString("Unknown message: " + message.replace(".", "_")));
         return TextSerializers.FORMATTING_CODE.deserialize(replaced);
     }
 }
