@@ -159,13 +159,15 @@ public class GameManager {
         if (gameState == GameState.WAITING) {
             if (players.size() < plugin.config.minPlayers) {
                 sendToAll(plugin.getMessage("message.playerstostart", s -> s.replace("%1", String.valueOf(players.size())).replace("%2", String.valueOf(plugin.config.minPlayers))));
-            } else if (gameState == GameState.COUNTING) {
-                sendToAll(plugin.getMessage("error.notenoughplayers"));
-                gameState = GameState.WAITING;
-                if (countingTask != null) {
-                    countingTask.cancel();
-                }
             }
+        } else if (gameState == GameState.COUNTING) {
+            sendToAll(plugin.getMessage("error.notenoughplayers"));
+            gameState = GameState.WAITING;
+            if (countingTask != null) {
+                countingTask.cancel();
+            }
+        } else {
+            sendToAll(plugin.getMessage("message.left", s -> s.replace("%1", player.getName()).replace("%2", String.valueOf(getLivingPlayers().size()))));
         }
     }
 
@@ -178,7 +180,7 @@ public class GameManager {
 
     @Listener
     public void onPlayerMove(MoveEntityEvent event, @Getter("getTargetEntity") Player player) {
-        if (players.containsKey(player.getUniqueId())) {
+        if (players.containsKey(player.getUniqueId()) && !event.getFromTransform().getPosition().equals(event.getToTransform().getPosition())) {
             if (gameState == GameState.PLAYING) {
                 for (Location<World> block : getRemovableBlocks(player)) {
                     if (block.getBlockType() == BlockTypes.TNT || block.getRelative(Direction.DOWN).getBlockType() == BlockTypes.TNT) {
@@ -204,8 +206,10 @@ public class GameManager {
         for (double ox = -0.2; ox <= 0.2; ox += 0.2) {
             for (double oz = -0.2; oz <= 0.2; oz += 0.2) {
                 Location<World> main = playerLocation.add(ox, 0, oz).getRelative(Direction.DOWN);
-                removableBlocks.add(main);
-                removableBlocks.add(main.getRelative(Direction.DOWN));
+                if (main.getRelative(Direction.DOWN).getBlockType() == BlockTypes.TNT) {
+                    removableBlocks.add(main);
+                    removableBlocks.add(main.getRelative(Direction.DOWN));
+                }
             }
         }
 
@@ -224,9 +228,13 @@ public class GameManager {
         Location<World> location = players.remove(player.getUniqueId());
         player.setLocation(location);
 
-        List<Player> livingPlayers = getLivingPlayers();
+        sendToAll(plugin.getMessage("message.death", s -> s.replace("%1", player.getName()).replace("%2", String.valueOf(getLivingPlayers().size()))));
 
-        sendToAll(plugin.getMessage("message.death", s -> s.replace("%1", player.getName()).replace("%2", String.valueOf(livingPlayers.size()))));
+        checkWinCondition();
+    }
+
+    public void checkWinCondition() {
+        List<Player> livingPlayers = getLivingPlayers();
 
         if (livingPlayers.size() <= 1) {
             livingPlayers.stream().findFirst().ifPresent((this::playerWins));
@@ -243,7 +251,7 @@ public class GameManager {
         }
     }
 
-    private void endGame() {
+    public void endGame() {
         gameState = GameState.GAMEOVER;
 
         Sponge.getScheduler().createTaskBuilder().delay(5, TimeUnit.SECONDS).execute(task -> {
